@@ -63,6 +63,7 @@ const ES_EXAMPLES = [
 // ─── LocalStorage helpers ─────────────────────────────────────────────────────
 
 function loadHistory(): HistoryItem[] {
+  if (typeof window === "undefined") return [];
   try {
     return JSON.parse(localStorage.getItem(STORAGE_KEY) ?? "[]");
   } catch {
@@ -71,6 +72,7 @@ function loadHistory(): HistoryItem[] {
 }
 
 function saveHistory(items: HistoryItem[]) {
+  if (typeof window === "undefined") return;
   localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
 }
 
