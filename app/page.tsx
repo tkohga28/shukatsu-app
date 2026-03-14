@@ -454,7 +454,7 @@ export default function Home() {
                             <span className="text-xs text-gray-400">{formatDate(item.createdAt)}</span>
                           </div>
                           {item.question && <p className="text-sm font-medium text-gray-700 mb-2 truncate">{item.question}</p>}
-                          {item.scores && (
+                          {item.scores != null && (
                             <div className="flex gap-3 mb-2">
                               {AXES.map(({ key, label, color }) => (
                                 <span key={key} className={`text-xs font-medium ${COLOR[color].text}`}>
@@ -601,7 +601,7 @@ export default function Home() {
 // ─── StatsSection ────────────────────────────────────────────────────────────
 
 function StatsSection({ history }: { history: HistoryItem[] }) {
-  const scored = history.filter((h) => h.scores !== null);
+  const scored = history.filter((h) => h.scores != null);
   const TREND_COUNT = 10;
   // 時系列順（古い→新しい）で最大10件
   const trendItems = [...scored].reverse().slice(-TREND_COUNT);
