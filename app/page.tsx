@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useEffect } from "react";
 import ReactMarkdown from "react-markdown";
 
 type FeedbackType = "interview" | "es";
@@ -54,7 +54,6 @@ export default function Home() {
   const [error, setError] = useState("");
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const [selectedItem, setSelectedItem] = useState<HistoryItem | null>(null);
-  const feedbackRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     setHistory(loadHistory());
@@ -93,7 +92,6 @@ export default function Home() {
         const chunk = decoder.decode(value, { stream: true });
         fullFeedback += chunk;
         setFeedback((prev) => prev + chunk);
-        feedbackRef.current?.scrollIntoView({ behavior: "smooth" });
       }
 
       // 履歴に保存
@@ -177,15 +175,26 @@ export default function Home() {
         {/* ===== 履歴詳細 ===== */}
         {view === "history-detail" && selectedItem && (
           <>
-            <button
-              onClick={() => setView("history")}
-              className="flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700 transition-colors"
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-              </svg>
-              履歴一覧に戻る
-            </button>
+            <div className="flex items-center justify-between">
+              <button
+                onClick={() => setView("history")}
+                className="flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700 transition-colors"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                </svg>
+                履歴一覧に戻る
+              </button>
+              <button
+                onClick={() => { handleReset(); setView("form"); }}
+                className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors shadow-sm"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                </svg>
+                新しく練習する
+              </button>
+            </div>
 
             <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 space-y-4">
               <div className="flex items-center justify-between">
@@ -233,19 +242,30 @@ export default function Home() {
           <>
             <div className="flex items-center justify-between">
               <h2 className="text-base font-semibold text-gray-800">フィードバック履歴</h2>
-              {history.length > 0 && (
+              <div className="flex items-center gap-3">
+                {history.length > 0 && (
+                  <button
+                    onClick={() => {
+                      if (confirm("履歴をすべて削除しますか？")) {
+                        saveHistory([]);
+                        setHistory([]);
+                      }
+                    }}
+                    className="text-xs text-red-400 hover:text-red-600 transition-colors"
+                  >
+                    すべて削除
+                  </button>
+                )}
                 <button
-                  onClick={() => {
-                    if (confirm("履歴をすべて削除しますか？")) {
-                      saveHistory([]);
-                      setHistory([]);
-                    }
-                  }}
-                  className="text-xs text-red-400 hover:text-red-600 transition-colors"
+                  onClick={() => { handleReset(); setView("form"); }}
+                  className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors shadow-sm"
                 >
-                  すべて削除
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                  </svg>
+                  新しく練習する
                 </button>
-              )}
+              </div>
             </div>
 
             {history.length === 0 ? (
@@ -380,15 +400,20 @@ export default function Home() {
                 <button
                   onClick={handleSubmit}
                   disabled={loading}
-                  className="flex-1 bg-blue-600 text-white py-3 rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
+                  className="flex-1 bg-gradient-to-r from-blue-600 to-blue-500 text-white py-4 rounded-xl text-base font-bold hover:from-blue-700 hover:to-blue-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-md hover:shadow-lg active:scale-[0.98] flex items-center justify-center gap-2"
                 >
                   {loading ? (
                     <>
-                      <span className="inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      <span className="inline-block w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
                       フィードバック生成中…
                     </>
                   ) : (
-                    "フィードバックを受ける"
+                    <>
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      フィードバックを受ける
+                    </>
                   )}
                 </button>
                 {(answer || feedback) && (
@@ -404,10 +429,7 @@ export default function Home() {
 
             {/* Feedback Output */}
             {(feedback || loading) && (
-              <div
-                ref={feedbackRef}
-                className="bg-white rounded-xl shadow-sm border border-gray-100 p-6"
-              >
+              <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
                 <h2 className="text-base font-semibold text-gray-800 mb-4 flex items-center gap-2">
                   <span className="inline-block w-2 h-2 rounded-full bg-blue-500" />
                   AIフィードバック
