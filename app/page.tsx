@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef } from "react";
+import ReactMarkdown from "react-markdown";
 
 type FeedbackType = "interview" | "es";
 
@@ -226,37 +227,42 @@ export default function Home() {
 }
 
 function FeedbackContent({ text }: { text: string }) {
-  const lines = text.split("\n");
-
   return (
-    <div className="space-y-1">
-      {lines.map((line, i) => {
-        if (/^【.+】/.test(line)) {
-          return (
-            <p key={i} className="font-semibold text-gray-800 mt-4 first:mt-0">
-              {line}
-            </p>
-          );
-        }
-        if (line.startsWith("→")) {
-          return (
-            <p
-              key={i}
-              className="text-blue-700 bg-blue-50 rounded-lg px-4 py-3 mt-3 text-sm"
-            >
-              {line}
-            </p>
-          );
-        }
-        if (line.trim() === "") {
-          return <div key={i} className="h-1" />;
-        }
-        return (
-          <p key={i} className="text-gray-700 text-sm leading-relaxed">
-            {line}
-          </p>
-        );
-      })}
-    </div>
+    <ReactMarkdown
+      components={{
+        h1: ({ children }) => (
+          <h1 className="text-xl font-bold text-gray-900 mt-6 mb-2 first:mt-0">{children}</h1>
+        ),
+        h2: ({ children }) => (
+          <h2 className="text-lg font-bold text-gray-800 mt-5 mb-2 first:mt-0">{children}</h2>
+        ),
+        h3: ({ children }) => (
+          <h3 className="text-base font-semibold text-gray-800 mt-4 mb-1 first:mt-0">{children}</h3>
+        ),
+        p: ({ children }) => (
+          <p className="text-gray-700 text-sm leading-relaxed mb-3">{children}</p>
+        ),
+        strong: ({ children }) => (
+          <strong className="font-semibold text-gray-900">{children}</strong>
+        ),
+        ul: ({ children }) => (
+          <ul className="list-disc list-inside space-y-1 mb-3 text-sm text-gray-700">{children}</ul>
+        ),
+        ol: ({ children }) => (
+          <ol className="list-decimal list-inside space-y-1 mb-3 text-sm text-gray-700">{children}</ol>
+        ),
+        li: ({ children }) => (
+          <li className="leading-relaxed">{children}</li>
+        ),
+        blockquote: ({ children }) => (
+          <blockquote className="border-l-4 border-blue-400 pl-4 py-1 bg-blue-50 rounded-r-lg text-blue-700 text-sm mb-3">{children}</blockquote>
+        ),
+        code: ({ children }) => (
+          <code className="bg-gray-100 px-1.5 py-0.5 rounded text-sm font-mono text-gray-800">{children}</code>
+        ),
+      }}
+    >
+      {text}
+    </ReactMarkdown>
   );
 }
