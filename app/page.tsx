@@ -5,13 +5,42 @@ import ReactMarkdown from "react-markdown";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
-type FeedbackType = "interview" | "es";
+type FeedbackType = "interview" | "es" | "motivation";
 
+/** 各軸のスコア + コメント（新形式） */
+type FeedbackItem = { score: number; comment: string };
+
+/** 面接 / ES の構造化フィードバック */
+type StructuredFeedback = {
+  clarity: FeedbackItem;
+  specificity: FeedbackItem;
+  learning: FeedbackItem;
+  reproducibility: FeedbackItem;
+  improvement: string[];
+  overall: string;
+};
+
+/** 志望動機チェックの構造化フィードバック */
+type MotivationFeedback = {
+  understanding: FeedbackItem;
+  alignment: FeedbackItem;
+  uniqueness: FeedbackItem;
+  improvement: string[];
+  overall: string;
+};
+
+/** 旧形式との互換用スコア型 */
 type Scores = {
-  clarity: number;        // 結論の明確さ
-  specificity: number;    // 根拠の具体性
-  learning: number;       // 学びの言語化
-  reproducibility: number; // 再現性の伝わりやすさ
+  clarity: number;
+  specificity: number;
+  learning: number;
+  reproducibility: number;
+};
+
+type MotivationScores = {
+  understanding: number;
+  alignment: number;
+  uniqueness: number;
 };
 
 type HistoryItem = {
@@ -19,8 +48,12 @@ type HistoryItem = {
   type: FeedbackType;
   question: string;
   answer: string;
+  supplement?: string;
+  /** 旧形式のマークダウンフィードバック（後方互換用） */
   feedback: string;
-  scores: Scores | null;
+  /** 新形式の構造化フィードバック */
+  structuredFeedback?: StructuredFeedback | MotivationFeedback;
+  scores: Scores | MotivationScores | null;
   createdAt: string;
 };
 
@@ -29,14 +62,18 @@ type View = "form" | "history" | "history-detail";
 // ─── Constants ───────────────────────────────────────────────────────────────
 
 const STORAGE_KEY = "shukatsu_history";
-const SCORE_MARKER = "<SCORE>";
-const SCORE_END_MARKER = "</SCORE>";
 
 const AXES: { key: keyof Scores; label: string; color: keyof typeof COLOR }[] = [
-  { key: "clarity",        label: "結論の明確さ",         color: "blue"   },
-  { key: "specificity",    label: "根拠の具体性",         color: "green"  },
-  { key: "learning",       label: "学びの言語化",         color: "purple" },
+  { key: "clarity",         label: "結論の明確さ",         color: "blue"   },
+  { key: "specificity",     label: "根拠の具体性",         color: "green"  },
+  { key: "learning",        label: "学びの言語化",         color: "purple" },
   { key: "reproducibility", label: "再現性の伝わりやすさ", color: "orange" },
+];
+
+const MOTIVATION_AXES: { key: keyof MotivationScores; label: string; color: keyof typeof COLOR }[] = [
+  { key: "understanding", label: "企業理解度", color: "blue"   },
+  { key: "alignment",     label: "一致度",     color: "green"  },
+  { key: "uniqueness",    label: "独自性",     color: "purple" },
 ];
 
 const COLOR = {
@@ -76,39 +113,6 @@ function saveHistory(items: HistoryItem[]) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
 }
 
-// ─── Score parsing ────────────────────────────────────────────────────────────
-
-function parseScores(raw: string): { feedbackText: string; scores: Scores | null } {
-  const start = raw.indexOf(SCORE_MARKER);
-  if (start === -1) return { feedbackText: raw, scores: null };
-
-  const feedbackText = raw.slice(0, start).trim();
-  const end = raw.indexOf(SCORE_END_MARKER, start);
-  if (end === -1) return { feedbackText, scores: null };
-
-  try {
-    const json = raw.slice(start + SCORE_MARKER.length, end);
-    const scores = JSON.parse(json) as Scores;
-    if (
-      typeof scores.clarity === "number" &&
-      typeof scores.specificity === "number" &&
-      typeof scores.learning === "number" &&
-      typeof scores.reproducibility === "number"
-    ) {
-      return { feedbackText, scores };
-    }
-    return { feedbackText, scores: null };
-  } catch {
-    return { feedbackText, scores: null };
-  }
-}
-
-/** ストリーミング中の表示用：<SCORE>以降は非表示 */
-function getDisplayText(raw: string): string {
-  const idx = raw.indexOf(SCORE_MARKER);
-  return idx === -1 ? raw : raw.slice(0, idx).trim();
-}
-
 // ─── Utilities ────────────────────────────────────────────────────────────────
 
 function formatDate(iso: string): string {
@@ -121,6 +125,12 @@ function avg(nums: number[]): number {
   return nums.reduce((a, b) => a + b, 0) / nums.length;
 }
 
+function typeBadge(type: FeedbackType) {
+  if (type === "interview") return { label: "面接",     className: "bg-blue-100 text-blue-700"   };
+  if (type === "es")        return { label: "ES",       className: "bg-purple-100 text-purple-700" };
+  return                           { label: "志望動機", className: "bg-teal-100 text-teal-700"   };
+}
+
 // ─── Components ───────────────────────────────────────────────────────────────
 
 function ScoreBar({ score, color }: { score: number; color: keyof typeof COLOR }) {
@@ -128,10 +138,7 @@ function ScoreBar({ score, color }: { score: number; color: keyof typeof COLOR }
   return (
     <div className="flex items-center gap-2">
       <div className="flex-1 h-2 bg-gray-100 rounded-full overflow-hidden">
-        <div
-          className={`h-full rounded-full transition-all ${c.bar}`}
-          style={{ width: `${(score / 5) * 100}%` }}
-        />
+        <div className={`h-full rounded-full transition-all ${c.bar}`} style={{ width: `${(score / 5) * 100}%` }} />
       </div>
       <span className={`text-sm font-bold w-6 text-right ${c.text}`}>{score}</span>
     </div>
@@ -158,38 +165,110 @@ function ScoreCards({ scores }: { scores: Scores }) {
   );
 }
 
-function Sparkline({ values, color }: { values: number[]; color: string }) {
-  const W = 100, H = 36, PAD = 4;
-  if (values.length === 0) return null;
-  if (values.length === 1) {
-    const cy = PAD + (H - PAD * 2) * (1 - (values[0] - 1) / 4);
-    return (
-      <svg width={W} height={H}>
-        <circle cx={W / 2} cy={cy} r="3" fill={color} />
-      </svg>
-    );
-  }
-  const xStep = (W - PAD * 2) / (values.length - 1);
-  const yOf = (v: number) => PAD + (H - PAD * 2) * (1 - (v - 1) / 4);
-  const points = values.map((v, i) => `${PAD + i * xStep},${yOf(v)}`).join(" ");
+function MotivationScoreCards({ scores }: { scores: MotivationScores }) {
   return (
-    <svg width={W} height={H} className="overflow-visible">
-      <polyline
-        points={points}
-        fill="none"
-        stroke={color}
-        strokeWidth="2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        opacity="0.8"
-      />
-      {values.map((v, i) => (
-        <circle key={i} cx={PAD + i * xStep} cy={yOf(v)} r="2.5" fill={color} />
-      ))}
-    </svg>
+    <div className="grid grid-cols-3 gap-3 mb-5">
+      {MOTIVATION_AXES.map(({ key, label, color }) => {
+        const c = COLOR[color];
+        return (
+          <div key={key} className={`${c.bg} rounded-xl p-4`}>
+            <p className={`text-xs font-medium ${c.text} mb-2`}>{label}</p>
+            <div className="flex items-end gap-1">
+              <span className={`text-2xl font-bold ${c.text}`}>{scores[key]}</span>
+              <span className="text-xs text-gray-400 mb-0.5">/ 5</span>
+            </div>
+            <ScoreBar score={scores[key]} color={color} />
+          </div>
+        );
+      })}
+    </div>
   );
 }
 
+function ImprovementList({ items }: { items: string[] }) {
+  return (
+    <div className="bg-amber-50 rounded-xl p-4">
+      <p className="text-sm font-semibold text-amber-700 mb-3">改善提案</p>
+      <ul className="space-y-2">
+        {items.map((item, i) => (
+          <li key={i} className="flex gap-2 text-sm text-gray-700 leading-relaxed">
+            <span className="text-amber-500 font-bold flex-shrink-0 mt-0.5">{i + 1}.</span>
+            <span>{item}</span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function OverallBox({ text }: { text: string }) {
+  return (
+    <div className="border-l-4 border-blue-400 pl-4 py-2 bg-blue-50 rounded-r-xl">
+      <p className="text-xs font-semibold text-blue-600 mb-1">総評</p>
+      <p className="text-sm text-gray-700 leading-relaxed">{text}</p>
+    </div>
+  );
+}
+
+/** 新形式（構造化JSON）のフィードバック表示 */
+function StructuredFeedbackView({
+  feedback,
+  isMotivation,
+}: {
+  feedback: StructuredFeedback | MotivationFeedback;
+  isMotivation: boolean;
+}) {
+  if (isMotivation) {
+    const mf = feedback as MotivationFeedback;
+    const scores: MotivationScores = {
+      understanding: mf.understanding.score,
+      alignment: mf.alignment.score,
+      uniqueness: mf.uniqueness.score,
+    };
+    return (
+      <div className="space-y-4">
+        <MotivationScoreCards scores={scores} />
+        {MOTIVATION_AXES.map(({ key, label, color }) => {
+          const c = COLOR[color];
+          return (
+            <div key={key} className={`${c.bg} rounded-xl p-4`}>
+              <p className={`text-sm font-semibold ${c.text} mb-1.5`}>{label}</p>
+              <p className="text-sm text-gray-700 leading-relaxed">{mf[key].comment}</p>
+            </div>
+          );
+        })}
+        <ImprovementList items={mf.improvement} />
+        <OverallBox text={mf.overall} />
+      </div>
+    );
+  }
+
+  const sf = feedback as StructuredFeedback;
+  const scores: Scores = {
+    clarity: sf.clarity.score,
+    specificity: sf.specificity.score,
+    learning: sf.learning.score,
+    reproducibility: sf.reproducibility.score,
+  };
+  return (
+    <div className="space-y-4">
+      <ScoreCards scores={scores} />
+      {AXES.map(({ key, label, color }) => {
+        const c = COLOR[color];
+        return (
+          <div key={key} className={`${c.bg} rounded-xl p-4`}>
+            <p className={`text-sm font-semibold ${c.text} mb-1.5`}>{label}</p>
+            <p className="text-sm text-gray-700 leading-relaxed">{sf[key].comment}</p>
+          </div>
+        );
+      })}
+      <ImprovementList items={sf.improvement} />
+      <OverallBox text={sf.overall} />
+    </div>
+  );
+}
+
+/** 旧形式（マークダウン）のフィードバック表示（後方互換） */
 function FeedbackContent({ text }: { text: string }) {
   return (
     <ReactMarkdown
@@ -211,66 +290,112 @@ function FeedbackContent({ text }: { text: string }) {
   );
 }
 
+function Sparkline({ values, color }: { values: number[]; color: string }) {
+  const W = 100, H = 36, PAD = 4;
+  if (values.length === 0) return null;
+  if (values.length === 1) {
+    const cy = PAD + (H - PAD * 2) * (1 - (values[0] - 1) / 4);
+    return <svg width={W} height={H}><circle cx={W / 2} cy={cy} r="3" fill={color} /></svg>;
+  }
+  const xStep = (W - PAD * 2) / (values.length - 1);
+  const yOf = (v: number) => PAD + (H - PAD * 2) * (1 - (v - 1) / 4);
+  const points = values.map((v, i) => `${PAD + i * xStep},${yOf(v)}`).join(" ");
+  return (
+    <svg width={W} height={H} className="overflow-visible">
+      <polyline points={points} fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" opacity="0.8" />
+      {values.map((v, i) => <circle key={i} cx={PAD + i * xStep} cy={yOf(v)} r="2.5" fill={color} />)}
+    </svg>
+  );
+}
+
 // ─── Main ─────────────────────────────────────────────────────────────────────
 
 export default function Home() {
-  const [view, setView]             = useState<View>("form");
-  const [activeTab, setActiveTab]   = useState<FeedbackType>("interview");
-  const [question, setQuestion]     = useState("");
-  const [answer, setAnswer]         = useState("");
-  const [rawFeedback, setRawFeedback] = useState(""); // full streamed text incl. <SCORE>
-  const [scores, setScores]         = useState<Scores | null>(null);
-  const [loading, setLoading]       = useState(false);
-  const [error, setError]           = useState("");
-  const [history, setHistory]       = useState<HistoryItem[]>([]);
-  const [selectedItem, setSelectedItem] = useState<HistoryItem | null>(null);
+  const [view, setView]         = useState<View>("form");
+  const [activeTab, setActiveTab] = useState<"interview" | "es">("interview");
+  const [esSubTab, setEsSubTab]   = useState<"question" | "motivation">("question");
+
+  // 通常フォーム
+  const [question, setQuestion] = useState("");
+  const [answer, setAnswer]     = useState("");
+
+  // 志望動機フォーム
+  const [companyName, setCompanyName]       = useState("");
+  const [motivationText, setMotivationText] = useState("");
+  const [supplementText, setSupplementText] = useState("");
+
+  // フィードバック結果
+  const [structuredFeedback, setStructuredFeedback] = useState<StructuredFeedback | MotivationFeedback | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError]     = useState("");
+
+  const [history, setHistory]             = useState<HistoryItem[]>([]);
+  const [selectedItem, setSelectedItem]   = useState<HistoryItem | null>(null);
 
   useEffect(() => { setHistory(loadHistory()); }, []);
 
+  const isMotivationMode = activeTab === "es" && esSubTab === "motivation";
+
   const handleSubmit = async () => {
-    if (!answer.trim()) { setError("回答を入力してください。"); return; }
+    if (isMotivationMode) {
+      if (!companyName.trim())    { setError("企業名を入力してください。"); return; }
+      if (!motivationText.trim()) { setError("志望動機を入力してください。"); return; }
+    } else {
+      if (!answer.trim()) { setError("回答を入力してください。"); return; }
+    }
     setError("");
-    setRawFeedback("");
-    setScores(null);
+    setStructuredFeedback(null);
     setLoading(true);
 
-    let accumulated = "";
-
     try {
+      const body = isMotivationMode
+        ? { type: "motivation", companyName, motivation: motivationText, supplement: supplementText }
+        : { type: activeTab, question, answer };
+
       const res = await fetch("/api/feedback", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ type: activeTab, question, answer }),
+        body: JSON.stringify(body),
       });
-      if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.error ?? "エラーが発生しました");
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "エラーが発生しました");
+
+      setStructuredFeedback(data);
+
+      // HistoryItem に保存
+      let scores: Scores | MotivationScores | null = null;
+      let newItem: HistoryItem;
+
+      if (isMotivationMode) {
+        const mf = data as MotivationFeedback;
+        scores = { understanding: mf.understanding.score, alignment: mf.alignment.score, uniqueness: mf.uniqueness.score };
+        newItem = {
+          id: crypto.randomUUID(),
+          type: "motivation",
+          question: companyName,
+          answer: motivationText,
+          supplement: supplementText || undefined,
+          feedback: mf.overall,
+          structuredFeedback: mf,
+          scores,
+          createdAt: new Date().toISOString(),
+        };
+      } else {
+        const sf = data as StructuredFeedback;
+        scores = { clarity: sf.clarity.score, specificity: sf.specificity.score, learning: sf.learning.score, reproducibility: sf.reproducibility.score };
+        newItem = {
+          id: crypto.randomUUID(),
+          type: activeTab,
+          question,
+          answer,
+          feedback: sf.overall,
+          structuredFeedback: sf,
+          scores,
+          createdAt: new Date().toISOString(),
+        };
       }
 
-      const reader = res.body?.getReader();
-      const decoder = new TextDecoder();
-      if (!reader) throw new Error("ストリームの取得に失敗しました");
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        accumulated += decoder.decode(value, { stream: true });
-        setRawFeedback(accumulated);
-      }
-
-      // ストリーム完了後にスコアを抽出して保存
-      const { feedbackText, scores: parsedScores } = parseScores(accumulated);
-      setScores(parsedScores);
-
-      const newItem: HistoryItem = {
-        id: crypto.randomUUID(),
-        type: activeTab,
-        question,
-        answer,
-        feedback: feedbackText,
-        scores: parsedScores,
-        createdAt: new Date().toISOString(),
-      };
       const updated = [newItem, ...loadHistory()];
       saveHistory(updated);
       setHistory(updated);
@@ -282,10 +407,9 @@ export default function Home() {
   };
 
   const handleReset = () => {
-    setQuestion("");
-    setAnswer("");
-    setRawFeedback("");
-    setScores(null);
+    setQuestion(""); setAnswer("");
+    setCompanyName(""); setMotivationText(""); setSupplementText("");
+    setStructuredFeedback(null);
     setError("");
   };
 
@@ -297,7 +421,6 @@ export default function Home() {
   };
 
   const exampleQuestions = activeTab === "interview" ? INTERVIEW_EXAMPLES : ES_EXAMPLES;
-  const displayFeedback = getDisplayText(rawFeedback);
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -333,10 +456,7 @@ export default function Home() {
         {view === "history-detail" && selectedItem && (
           <>
             <div className="flex items-center justify-between">
-              <button
-                onClick={() => setView("history")}
-                className="flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700 transition-colors"
-              >
+              <button onClick={() => setView("history")} className="flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700 transition-colors">
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
                 </svg>
@@ -357,34 +477,45 @@ export default function Home() {
             <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 space-y-4">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${selectedItem.type === "interview" ? "bg-blue-100 text-blue-700" : "bg-purple-100 text-purple-700"}`}>
-                    {selectedItem.type === "interview" ? "面接" : "ES"}
+                  <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${typeBadge(selectedItem.type).className}`}>
+                    {typeBadge(selectedItem.type).label}
                   </span>
                   <span className="text-xs text-gray-400">{formatDate(selectedItem.createdAt)}</span>
                 </div>
-                <button onClick={() => handleDeleteHistory(selectedItem.id)} className="text-xs text-red-400 hover:text-red-600 transition-colors">
-                  削除
-                </button>
+                <button onClick={() => handleDeleteHistory(selectedItem.id)} className="text-xs text-red-400 hover:text-red-600 transition-colors">削除</button>
               </div>
-              {selectedItem.question && (
-                <div>
-                  <p className="text-xs font-medium text-gray-500 mb-1">質問 / 設問</p>
-                  <p className="text-sm text-gray-800 bg-gray-50 rounded-lg px-4 py-3">{selectedItem.question}</p>
-                </div>
+              {selectedItem.type === "motivation" ? (
+                <>
+                  <div>
+                    <p className="text-xs font-medium text-gray-500 mb-1">企業名</p>
+                    <p className="text-sm text-gray-800 bg-gray-50 rounded-lg px-4 py-3">{selectedItem.question}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs font-medium text-gray-500 mb-1">志望動機</p>
+                    <p className="text-sm text-gray-800 bg-gray-50 rounded-lg px-4 py-3 whitespace-pre-wrap leading-relaxed">{selectedItem.answer}</p>
+                  </div>
+                  {selectedItem.supplement && (
+                    <div>
+                      <p className="text-xs font-medium text-gray-500 mb-1">補足情報</p>
+                      <p className="text-sm text-gray-800 bg-gray-50 rounded-lg px-4 py-3 whitespace-pre-wrap leading-relaxed">{selectedItem.supplement}</p>
+                    </div>
+                  )}
+                </>
+              ) : (
+                <>
+                  {selectedItem.question && (
+                    <div>
+                      <p className="text-xs font-medium text-gray-500 mb-1">質問 / 設問</p>
+                      <p className="text-sm text-gray-800 bg-gray-50 rounded-lg px-4 py-3">{selectedItem.question}</p>
+                    </div>
+                  )}
+                  <div>
+                    <p className="text-xs font-medium text-gray-500 mb-1">回答内容</p>
+                    <p className="text-sm text-gray-800 bg-gray-50 rounded-lg px-4 py-3 whitespace-pre-wrap leading-relaxed">{selectedItem.answer}</p>
+                  </div>
+                </>
               )}
-              <div>
-                <p className="text-xs font-medium text-gray-500 mb-1">回答内容</p>
-                <p className="text-sm text-gray-800 bg-gray-50 rounded-lg px-4 py-3 whitespace-pre-wrap leading-relaxed">{selectedItem.answer}</p>
-              </div>
             </div>
-
-            {/* スコア */}
-            {selectedItem.scores && (
-              <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-                <h2 className="text-base font-semibold text-gray-800 mb-4">採点結果</h2>
-                <ScoreCards scores={selectedItem.scores} />
-              </div>
-            )}
 
             {/* フィードバック */}
             <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
@@ -392,7 +523,25 @@ export default function Home() {
                 <span className="inline-block w-2 h-2 rounded-full bg-blue-500" />
                 AIフィードバック
               </h2>
-              <FeedbackContent text={selectedItem.feedback} />
+              {selectedItem.structuredFeedback ? (
+                <StructuredFeedbackView
+                  feedback={selectedItem.structuredFeedback}
+                  isMotivation={selectedItem.type === "motivation"}
+                />
+              ) : (
+                /* 旧形式：スコア + マークダウン */
+                <>
+                  {selectedItem.scores && (
+                    <div className="mb-5">
+                      {selectedItem.type === "motivation"
+                        ? <MotivationScoreCards scores={selectedItem.scores as MotivationScores} />
+                        : <ScoreCards scores={selectedItem.scores as Scores} />
+                      }
+                    </div>
+                  )}
+                  <FeedbackContent text={selectedItem.feedback} />
+                </>
+              )}
             </div>
           </>
         )}
@@ -435,48 +584,50 @@ export default function Home() {
               </div>
             ) : (
               <>
-                {/* 統計サマリー */}
                 <StatsSection history={history} />
-
-                {/* 履歴リスト */}
                 <div className="space-y-3">
-                  {history.map((item) => (
-                    <div
-                      key={item.id}
-                      className="bg-white rounded-xl shadow-sm border border-gray-100 p-5 hover:border-blue-200 transition-colors"
-                    >
-                      <div className="flex items-start justify-between gap-3">
-                        <button className="flex-1 text-left" onClick={() => { setSelectedItem(item); setView("history-detail"); }}>
-                          <div className="flex items-center gap-2 mb-2">
-                            <span className={`text-xs px-2.5 py-0.5 rounded-full font-medium ${item.type === "interview" ? "bg-blue-100 text-blue-700" : "bg-purple-100 text-purple-700"}`}>
-                              {item.type === "interview" ? "面接" : "ES"}
-                            </span>
-                            <span className="text-xs text-gray-400">{formatDate(item.createdAt)}</span>
-                          </div>
-                          {item.question && <p className="text-sm font-medium text-gray-700 mb-2 truncate">{item.question}</p>}
-                          {item.scores != null && (
-                            <div className="flex gap-3 mb-2">
-                              {AXES.map(({ key, label, color }) => (
-                                <span key={key} className={`text-xs font-medium ${COLOR[color].text}`}>
-                                  {label.slice(0, 2)} {item.scores![key]}
-                                </span>
-                              ))}
+                  {history.map((item) => {
+                    const badge = typeBadge(item.type);
+                    return (
+                      <div key={item.id} className="bg-white rounded-xl shadow-sm border border-gray-100 p-5 hover:border-blue-200 transition-colors">
+                        <div className="flex items-start justify-between gap-3">
+                          <button className="flex-1 text-left" onClick={() => { setSelectedItem(item); setView("history-detail"); }}>
+                            <div className="flex items-center gap-2 mb-2">
+                              <span className={`text-xs px-2.5 py-0.5 rounded-full font-medium ${badge.className}`}>{badge.label}</span>
+                              <span className="text-xs text-gray-400">{formatDate(item.createdAt)}</span>
                             </div>
-                          )}
-                          <p className="text-xs text-gray-400 line-clamp-1 leading-relaxed">{item.answer}</p>
-                        </button>
-                        <button
-                          onClick={() => handleDeleteHistory(item.id)}
-                          className="text-gray-300 hover:text-red-400 transition-colors flex-shrink-0 mt-1"
-                          title="削除"
-                        >
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                          </svg>
-                        </button>
+                            {item.question && (
+                              <p className="text-sm font-medium text-gray-700 mb-2 truncate">
+                                {item.type === "motivation" ? `企業：${item.question}` : item.question}
+                              </p>
+                            )}
+                            {item.scores != null && (
+                              <div className="flex gap-3 mb-2">
+                                {item.type === "motivation"
+                                  ? MOTIVATION_AXES.map(({ key, label, color }) => (
+                                      <span key={key} className={`text-xs font-medium ${COLOR[color].text}`}>
+                                        {label.slice(0, 2)} {(item.scores as MotivationScores)[key]}
+                                      </span>
+                                    ))
+                                  : AXES.map(({ key, label, color }) => (
+                                      <span key={key} className={`text-xs font-medium ${COLOR[color].text}`}>
+                                        {label.slice(0, 2)} {(item.scores as Scores)[key]}
+                                      </span>
+                                    ))
+                                }
+                              </div>
+                            )}
+                            <p className="text-xs text-gray-400 line-clamp-1 leading-relaxed">{item.answer}</p>
+                          </button>
+                          <button onClick={() => handleDeleteHistory(item.id)} className="text-gray-300 hover:text-red-400 transition-colors flex-shrink-0 mt-1" title="削除">
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                          </button>
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </>
             )}
@@ -486,9 +637,9 @@ export default function Home() {
         {/* ═══ フォーム ═══ */}
         {view === "form" && (
           <>
-            {/* タブ */}
+            {/* メインタブ */}
             <div className="flex gap-2 bg-white rounded-xl p-1.5 shadow-sm border border-gray-100">
-              {(["interview", "es"] as FeedbackType[]).map((tab) => (
+              {(["interview", "es"] as const).map((tab) => (
                 <button
                   key={tab}
                   onClick={() => { setActiveTab(tab); handleReset(); }}
@@ -501,41 +652,104 @@ export default function Home() {
               ))}
             </div>
 
+            {/* ESサブタブ */}
+            {activeTab === "es" && (
+              <div className="flex gap-1.5 bg-gray-100 rounded-lg p-1">
+                {(["question", "motivation"] as const).map((sub) => (
+                  <button
+                    key={sub}
+                    onClick={() => { setEsSubTab(sub); handleReset(); }}
+                    className={`flex-1 py-2 rounded-md text-xs font-medium transition-all ${
+                      esSubTab === sub ? "bg-white text-gray-800 shadow-sm" : "text-gray-500 hover:text-gray-700"
+                    }`}
+                  >
+                    {sub === "question" ? "設問フィードバック" : "志望動機チェック"}
+                  </button>
+                ))}
+              </div>
+            )}
+
             {/* 入力フォーム */}
             <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 space-y-5">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                  {activeTab === "interview" ? "質問（任意）" : "設問（任意）"}
-                </label>
-                <input
-                  type="text"
-                  value={question}
-                  onChange={(e) => setQuestion(e.target.value)}
-                  placeholder={activeTab === "interview" ? "例：学生時代に最も力を入れたことを教えてください。" : "例：学生時代に力を入れたこと（ガクチカ）"}
-                  className="w-full px-4 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent placeholder-gray-400"
-                />
-                <div className="mt-2 flex flex-wrap gap-2">
-                  {exampleQuestions.map((q) => (
-                    <button key={q} onClick={() => setQuestion(q)} className="text-xs px-3 py-1 bg-blue-50 text-blue-600 rounded-full hover:bg-blue-100 transition-colors">
-                      {q}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                  {activeTab === "interview" ? "回答内容 *" : "ES内容 *"}
-                </label>
-                <textarea
-                  value={answer}
-                  onChange={(e) => setAnswer(e.target.value)}
-                  rows={8}
-                  placeholder={activeTab === "interview" ? "面接で話す内容を入力してください…" : "ESの文章をそのまま貼り付けてください…"}
-                  className="w-full px-4 py-3 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent placeholder-gray-400 resize-none"
-                />
-                <p className="text-xs text-gray-400 mt-1 text-right">{answer.length} 文字</p>
-              </div>
+              {isMotivationMode ? (
+                /* 志望動機チェックフォーム */
+                <>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                      企業名 <span className="text-red-400">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={companyName}
+                      onChange={(e) => setCompanyName(e.target.value)}
+                      placeholder="例：株式会社〇〇"
+                      className="w-full px-4 py-2.5 border border-gray-200 rounded-lg text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent placeholder-gray-400"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                      志望動機 <span className="text-red-400">*</span>
+                    </label>
+                    <textarea
+                      value={motivationText}
+                      onChange={(e) => setMotivationText(e.target.value)}
+                      rows={7}
+                      placeholder="御社を志望した理由を入力してください..."
+                      className="w-full px-4 py-3 border border-gray-200 rounded-lg text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent placeholder-gray-400 resize-none"
+                    />
+                    <p className="text-xs text-gray-400 mt-1 text-right">{motivationText.length} 文字</p>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                      補足情報{" "}
+                      <span className="text-xs font-normal text-gray-400">（任意）</span>
+                    </label>
+                    <textarea
+                      value={supplementText}
+                      onChange={(e) => setSupplementText(e.target.value)}
+                      rows={3}
+                      placeholder="自分の強み・経験など、判断に使ってほしい情報があれば"
+                      className="w-full px-4 py-3 border border-gray-200 rounded-lg text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent placeholder-gray-400 resize-none"
+                    />
+                  </div>
+                </>
+              ) : (
+                /* 通常フォーム */
+                <>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                      {activeTab === "interview" ? "質問（任意）" : "設問（任意）"}
+                    </label>
+                    <input
+                      type="text"
+                      value={question}
+                      onChange={(e) => setQuestion(e.target.value)}
+                      placeholder={activeTab === "interview" ? "例：学生時代に最も力を入れたことを教えてください。" : "例：学生時代に力を入れたこと（ガクチカ）"}
+                      className="w-full px-4 py-2.5 border border-gray-200 rounded-lg text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent placeholder-gray-400"
+                    />
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {exampleQuestions.map((q) => (
+                        <button key={q} onClick={() => setQuestion(q)} className="text-xs px-3 py-1 bg-blue-50 text-blue-600 rounded-full hover:bg-blue-100 transition-colors">
+                          {q}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                      {activeTab === "interview" ? "回答内容 *" : "ES内容 *"}
+                    </label>
+                    <textarea
+                      value={answer}
+                      onChange={(e) => setAnswer(e.target.value)}
+                      rows={8}
+                      placeholder={activeTab === "interview" ? "面接で話す内容を入力してください…" : "ESの文章をそのまま貼り付けてください…"}
+                      className="w-full px-4 py-3 border border-gray-200 rounded-lg text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent placeholder-gray-400 resize-none"
+                    />
+                    <p className="text-xs text-gray-400 mt-1 text-right">{answer.length} 文字</p>
+                  </div>
+                </>
+              )}
 
               {error && <p className="text-sm text-red-500 bg-red-50 px-4 py-2.5 rounded-lg">{error}</p>}
 
@@ -555,11 +769,11 @@ export default function Home() {
                       <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                       </svg>
-                      フィードバックを受ける
+                      {isMotivationMode ? "志望動機をチェックする" : "フィードバックを受ける"}
                     </>
                   )}
                 </button>
-                {(answer || rawFeedback) && (
+                {(answer || motivationText || structuredFeedback) && (
                   <button onClick={handleReset} className="px-5 py-3 border border-gray-200 text-gray-600 rounded-lg text-sm hover:bg-gray-50 transition-colors">
                     リセット
                   </button>
@@ -567,24 +781,25 @@ export default function Home() {
               </div>
             </div>
 
+            {/* ローディング */}
+            {loading && !structuredFeedback && (
+              <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+                <div className="space-y-3 animate-pulse">
+                  {[80, 100, 60, 90].map((w, i) => (
+                    <div key={i} className="h-4 bg-gray-100 rounded" style={{ width: `${w}%` }} />
+                  ))}
+                </div>
+              </div>
+            )}
+
             {/* フィードバック結果 */}
-            {(rawFeedback || loading) && (
+            {structuredFeedback && (
               <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
                 <h2 className="text-base font-semibold text-gray-800 mb-4 flex items-center gap-2">
                   <span className="inline-block w-2 h-2 rounded-full bg-blue-500" />
                   AIフィードバック
                 </h2>
-
-                {/* スコア（ストリーム完了後に表示） */}
-                {scores && <ScoreCards scores={scores} />}
-
-                {displayFeedback ? (
-                  <FeedbackContent text={displayFeedback} />
-                ) : (
-                  <div className="space-y-3 animate-pulse">
-                    {[1, 2, 3, 4].map((i) => <div key={i} className="h-4 bg-gray-100 rounded w-full" />)}
-                  </div>
-                )}
+                <StructuredFeedbackView feedback={structuredFeedback} isMotivation={isMotivationMode} />
               </div>
             )}
           </>
@@ -601,14 +816,15 @@ export default function Home() {
 // ─── StatsSection ────────────────────────────────────────────────────────────
 
 function StatsSection({ history }: { history: HistoryItem[] }) {
-  const scored = history.filter((h) => h.scores != null);
+  const scored = history.filter(
+    (h) => h.scores != null && h.type !== "motivation"
+  ) as (HistoryItem & { scores: Scores })[];
+
   const TREND_COUNT = 10;
-  // 時系列順（古い→新しい）で最大10件
   const trendItems = [...scored].reverse().slice(-TREND_COUNT);
 
   return (
     <div className="space-y-4">
-      {/* サマリーカード */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
         <div className="flex items-center gap-6 mb-5">
           <div className="text-center">
@@ -618,7 +834,7 @@ function StatsSection({ history }: { history: HistoryItem[] }) {
           {scored.length > 0 && (
             <div className="text-center">
               <p className="text-3xl font-bold text-blue-600">
-                {(avg(AXES.map(({ key }) => avg(scored.map((h) => h.scores![key])))) ).toFixed(1)}
+                {(avg(AXES.map(({ key }) => avg(scored.map((h) => h.scores[key]))))).toFixed(1)}
               </p>
               <p className="text-xs text-gray-500 mt-0.5">総合平均スコア</p>
             </div>
@@ -629,7 +845,7 @@ function StatsSection({ history }: { history: HistoryItem[] }) {
           <div className="space-y-3">
             <p className="text-xs font-medium text-gray-500">4軸の平均スコア</p>
             {AXES.map(({ key, label, color }) => {
-              const average = avg(scored.map((h) => h.scores![key]));
+              const average = avg(scored.map((h) => h.scores[key]));
               return (
                 <div key={key} className="flex items-center gap-3">
                   <span className="text-xs text-gray-600 w-28 flex-shrink-0">{label}</span>
@@ -644,13 +860,12 @@ function StatsSection({ history }: { history: HistoryItem[] }) {
         )}
       </div>
 
-      {/* スコア推移 */}
       {trendItems.length >= 2 && (
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
           <p className="text-xs font-medium text-gray-500 mb-4">スコア推移（直近{trendItems.length}回）</p>
           <div className="grid grid-cols-2 gap-4">
             {AXES.map(({ key, label, color }) => {
-              const values = trendItems.map((h) => h.scores![key]);
+              const values = trendItems.map((h) => h.scores[key]);
               const c = COLOR[color];
               return (
                 <div key={key} className={`${c.bg} rounded-xl p-3`}>
