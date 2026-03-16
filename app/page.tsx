@@ -62,6 +62,7 @@ type View = "form" | "history" | "history-detail";
 // ─── Constants ───────────────────────────────────────────────────────────────
 
 const STORAGE_KEY = "shukatsu_history";
+const ONBOARDING_KEY = "shukatsu_onboarding_dismissed";
 
 const AXES: { key: keyof Scores; label: string; color: keyof typeof COLOR }[] = [
   { key: "clarity",         label: "結論の明確さ",         color: "blue"   },
@@ -333,8 +334,22 @@ export default function Home() {
   const [selectedItem, setSelectedItem]   = useState<HistoryItem | null>(null);
   const [historyTypeFilter, setHistoryTypeFilter] = useState<"all" | FeedbackType>("all");
   const [historyQuestionFilter, setHistoryQuestionFilter] = useState<string>("");
+  const [showOnboarding, setShowOnboarding] = useState(false);
 
-  useEffect(() => { setHistory(loadHistory()); }, []);
+  useEffect(() => {
+    setHistory(loadHistory());
+    if (typeof window !== "undefined") {
+      const dismissed = localStorage.getItem(ONBOARDING_KEY);
+      if (!dismissed) setShowOnboarding(true);
+    }
+  }, []);
+
+  const handleDismissOnboarding = () => {
+    setShowOnboarding(false);
+    if (typeof window !== "undefined") {
+      localStorage.setItem(ONBOARDING_KEY, "1");
+    }
+  };
 
   const isMotivationMode = activeTab === "es" && esSubTab === "motivation";
 
@@ -718,6 +733,70 @@ export default function Home() {
         {/* ═══ フォーム ═══ */}
         {view === "form" && (
           <>
+            {/* オンボーディングバナー */}
+            {showOnboarding && history.length === 0 && (
+              <div className="relative bg-gradient-to-br from-blue-50 to-indigo-50 rounded-2xl border border-blue-100 shadow-sm p-6">
+                {/* × ボタン */}
+                <button
+                  onClick={handleDismissOnboarding}
+                  className="absolute top-3 right-3 w-7 h-7 flex items-center justify-center rounded-full text-gray-400 hover:text-gray-600 hover:bg-white/70 transition-colors"
+                  aria-label="閉じる"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+
+                <p className="text-xs font-semibold text-blue-500 uppercase tracking-wide mb-1">はじめての方へ</p>
+                <h2 className="text-lg font-bold text-gray-900 mb-4">このアプリでできること</h2>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-5">
+                  {/* 面接練習 */}
+                  <div className="bg-white rounded-xl p-4 border border-blue-100 shadow-sm">
+                    <div className="w-9 h-9 bg-blue-100 rounded-lg flex items-center justify-center mb-3">
+                      <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                      </svg>
+                    </div>
+                    <p className="text-sm font-semibold text-gray-800 mb-1">面接練習</p>
+                    <p className="text-xs text-gray-500 leading-relaxed">AIが結論・根拠・再現性の観点でFBします</p>
+                  </div>
+
+                  {/* ES添削 */}
+                  <div className="bg-white rounded-xl p-4 border border-purple-100 shadow-sm">
+                    <div className="w-9 h-9 bg-purple-100 rounded-lg flex items-center justify-center mb-3">
+                      <svg className="w-5 h-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                      </svg>
+                    </div>
+                    <p className="text-sm font-semibold text-gray-800 mb-1">ES添削</p>
+                    <p className="text-xs text-gray-500 leading-relaxed">面接で深掘りされても崩れない文章に仕上げます</p>
+                  </div>
+
+                  {/* 成長の記録 */}
+                  <div className="bg-white rounded-xl p-4 border border-green-100 shadow-sm">
+                    <div className="w-9 h-9 bg-green-100 rounded-lg flex items-center justify-center mb-3">
+                      <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+                      </svg>
+                    </div>
+                    <p className="text-sm font-semibold text-gray-800 mb-1">成長の記録</p>
+                    <p className="text-xs text-gray-500 leading-relaxed">設問別にスコア推移を記録して成長を可視化します</p>
+                  </div>
+                </div>
+
+                <button
+                  onClick={handleDismissOnboarding}
+                  className="w-full bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold py-3 rounded-xl transition-colors shadow-sm flex items-center justify-center gap-1.5"
+                >
+                  さっそく練習する
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" />
+                  </svg>
+                </button>
+              </div>
+            )}
+
             {/* メインタブ */}
             <div className="flex gap-2 bg-white rounded-xl p-1.5 shadow-sm border border-gray-100">
               {(["interview", "es"] as const).map((tab) => (
