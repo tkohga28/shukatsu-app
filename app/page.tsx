@@ -331,6 +331,8 @@ export default function Home() {
 
   const [history, setHistory]             = useState<HistoryItem[]>([]);
   const [selectedItem, setSelectedItem]   = useState<HistoryItem | null>(null);
+  const [historyTypeFilter, setHistoryTypeFilter] = useState<"all" | FeedbackType>("all");
+  const [historyQuestionFilter, setHistoryQuestionFilter] = useState<string>("");
 
   useEffect(() => { setHistory(loadHistory()); }, []);
 
@@ -419,6 +421,30 @@ export default function Home() {
     setHistory(updated);
     if (selectedItem?.id === id) { setSelectedItem(null); setView("history"); }
   };
+
+  const handlePracticeAgain = (item: HistoryItem) => {
+    handleReset();
+    if (item.type === "motivation") {
+      setActiveTab("es");
+      setEsSubTab("motivation");
+      setCompanyName(item.question);
+    } else {
+      setActiveTab(item.type as "interview" | "es");
+      setEsSubTab("question");
+      setQuestion(item.question);
+    }
+    setView("form");
+  };
+
+  const uniqueQuestions = Array.from(
+    new Set(history.filter((h) => h.question).map((h) => h.question))
+  ).filter(Boolean);
+
+  const filteredHistory = history.filter((item) => {
+    if (historyTypeFilter !== "all" && item.type !== historyTypeFilter) return false;
+    if (historyQuestionFilter && item.question !== historyQuestionFilter) return false;
+    return true;
+  });
 
   const exampleQuestions = activeTab === "interview" ? INTERVIEW_EXAMPLES : ES_EXAMPLES;
 
@@ -584,51 +610,106 @@ export default function Home() {
               </div>
             ) : (
               <>
-                <StatsSection history={history} />
-                <div className="space-y-3">
-                  {history.map((item) => {
-                    const badge = typeBadge(item.type);
-                    return (
-                      <div key={item.id} className="bg-white rounded-xl shadow-sm border border-gray-100 p-5 hover:border-blue-200 transition-colors">
-                        <div className="flex items-start justify-between gap-3">
-                          <button className="flex-1 text-left" onClick={() => { setSelectedItem(item); setView("history-detail"); }}>
-                            <div className="flex items-center gap-2 mb-2">
-                              <span className={`text-xs px-2.5 py-0.5 rounded-full font-medium ${badge.className}`}>{badge.label}</span>
-                              <span className="text-xs text-gray-400">{formatDate(item.createdAt)}</span>
-                            </div>
-                            {item.question && (
-                              <p className="text-sm font-medium text-gray-700 mb-2 truncate">
-                                {item.type === "motivation" ? `企業：${item.question}` : item.question}
-                              </p>
-                            )}
-                            {item.scores != null && (
-                              <div className="flex gap-3 mb-2">
-                                {item.type === "motivation"
-                                  ? MOTIVATION_AXES.map(({ key, label, color }) => (
-                                      <span key={key} className={`text-xs font-medium ${COLOR[color].text}`}>
-                                        {label.slice(0, 2)} {(item.scores as MotivationScores)[key]}
-                                      </span>
-                                    ))
-                                  : AXES.map(({ key, label, color }) => (
-                                      <span key={key} className={`text-xs font-medium ${COLOR[color].text}`}>
-                                        {label.slice(0, 2)} {(item.scores as Scores)[key]}
-                                      </span>
-                                    ))
-                                }
-                              </div>
-                            )}
-                            <p className="text-xs text-gray-400 line-clamp-1 leading-relaxed">{item.answer}</p>
+                {/* フィルター */}
+                <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 space-y-3">
+                  <div>
+                    <p className="text-xs font-medium text-gray-500 mb-2">種別</p>
+                    <div className="flex flex-wrap gap-2">
+                      {(["all", "interview", "es", "motivation"] as const).map((t) => {
+                        const labels: Record<string, string> = { all: "すべて", interview: "面接", es: "ES", motivation: "志望動機チェック" };
+                        return (
+                          <button
+                            key={t}
+                            onClick={() => setHistoryTypeFilter(t)}
+                            className={`text-xs px-3 py-1.5 rounded-full font-medium transition-colors ${
+                              historyTypeFilter === t
+                                ? "bg-blue-600 text-white"
+                                : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                            }`}
+                          >
+                            {labels[t]}
                           </button>
-                          <button onClick={() => handleDeleteHistory(item.id)} className="text-gray-300 hover:text-red-400 transition-colors flex-shrink-0 mt-1" title="削除">
-                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                            </svg>
-                          </button>
-                        </div>
-                      </div>
-                    );
-                  })}
+                        );
+                      })}
+                    </div>
+                  </div>
+                  {uniqueQuestions.length > 0 && (
+                    <div>
+                      <p className="text-xs font-medium text-gray-500 mb-2">設問</p>
+                      <select
+                        value={historyQuestionFilter}
+                        onChange={(e) => setHistoryQuestionFilter(e.target.value)}
+                        className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                      >
+                        <option value="">すべての設問</option>
+                        {uniqueQuestions.map((q) => (
+                          <option key={q} value={q}>{q}</option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
                 </div>
+
+                <StatsSection history={history} questionFilter={historyQuestionFilter} />
+
+                {filteredHistory.length === 0 ? (
+                  <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-8 text-center">
+                    <p className="text-sm text-gray-400">条件に一致する履歴がありません</p>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {filteredHistory.map((item) => {
+                      const badge = typeBadge(item.type);
+                      return (
+                        <div key={item.id} className="bg-white rounded-xl shadow-sm border border-gray-100 p-5 hover:border-blue-200 transition-colors">
+                          <div className="flex items-start justify-between gap-3">
+                            <button className="flex-1 text-left" onClick={() => { setSelectedItem(item); setView("history-detail"); }}>
+                              <div className="flex items-center gap-2 mb-2">
+                                <span className={`text-xs px-2.5 py-0.5 rounded-full font-medium ${badge.className}`}>{badge.label}</span>
+                                <span className="text-xs text-gray-400">{formatDate(item.createdAt)}</span>
+                              </div>
+                              {item.question && (
+                                <p className="text-sm font-medium text-gray-700 mb-2 truncate">
+                                  {item.type === "motivation" ? `企業：${item.question}` : item.question}
+                                </p>
+                              )}
+                              {item.scores != null && (
+                                <div className="flex gap-3 mb-2">
+                                  {item.type === "motivation"
+                                    ? MOTIVATION_AXES.map(({ key, label, color }) => (
+                                        <span key={key} className={`text-xs font-medium ${COLOR[color].text}`}>
+                                          {label.slice(0, 2)} {(item.scores as MotivationScores)[key]}
+                                        </span>
+                                      ))
+                                    : AXES.map(({ key, label, color }) => (
+                                        <span key={key} className={`text-xs font-medium ${COLOR[color].text}`}>
+                                          {label.slice(0, 2)} {(item.scores as Scores)[key]}
+                                        </span>
+                                      ))
+                                  }
+                                </div>
+                              )}
+                              <p className="text-xs text-gray-400 line-clamp-1 leading-relaxed">{item.answer}</p>
+                            </button>
+                            <div className="flex flex-col items-end gap-2 flex-shrink-0">
+                              <button
+                                onClick={() => handlePracticeAgain(item)}
+                                className="text-xs px-3 py-1.5 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition-colors font-medium whitespace-nowrap"
+                              >
+                                同じ設問で再練習
+                              </button>
+                              <button onClick={() => handleDeleteHistory(item.id)} className="text-gray-300 hover:text-red-400 transition-colors" title="削除">
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </>
             )}
           </>
@@ -815,12 +896,101 @@ export default function Home() {
 
 // ─── StatsSection ────────────────────────────────────────────────────────────
 
-function StatsSection({ history }: { history: HistoryItem[] }) {
+function StatsSection({ history, questionFilter }: { history: HistoryItem[]; questionFilter: string }) {
   const scored = history.filter(
     (h) => h.scores != null && h.type !== "motivation"
   ) as (HistoryItem & { scores: Scores })[];
 
   const TREND_COUNT = 10;
+
+  // 設問フィルターが有効なとき：設問別の詳細表示
+  if (questionFilter) {
+    const qScored = scored.filter((h) => h.question === questionFilter);
+    const trendItems = [...qScored].reverse().slice(-TREND_COUNT);
+    const prevItem   = trendItems.length >= 2 ? trendItems[trendItems.length - 2] : null;
+    const latestItem = trendItems.length >= 1 ? trendItems[trendItems.length - 1] : null;
+
+    return (
+      <div className="space-y-4">
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
+          <div className="flex items-center gap-6 mb-4">
+            <div className="text-center">
+              <p className="text-3xl font-bold text-gray-900">{qScored.length}</p>
+              <p className="text-xs text-gray-500 mt-0.5">この設問での練習回数</p>
+            </div>
+            {qScored.length > 0 && (
+              <div className="text-center">
+                <p className="text-3xl font-bold text-blue-600">
+                  {(avg(AXES.map(({ key }) => avg(qScored.map((h) => h.scores[key]))))).toFixed(1)}
+                </p>
+                <p className="text-xs text-gray-500 mt-0.5">総合平均スコア</p>
+              </div>
+            )}
+          </div>
+
+          {qScored.length > 0 && (
+            <div className="space-y-3">
+              <p className="text-xs font-medium text-gray-500">4軸の平均スコア</p>
+              {AXES.map(({ key, label, color }) => {
+                const average = avg(qScored.map((h) => h.scores[key]));
+                return (
+                  <div key={key} className="flex items-center gap-3">
+                    <span className="text-xs text-gray-600 w-28 flex-shrink-0">{label}</span>
+                    <div className="flex-1">
+                      <ScoreBar score={Math.round(average * 10) / 10} color={color} />
+                    </div>
+                    <span className="text-xs text-gray-400 w-8 text-right">{average.toFixed(1)}</span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {prevItem && latestItem && (
+            <div className="mt-4 pt-4 border-t border-gray-100">
+              <p className="text-xs font-medium text-gray-500 mb-2">前回からの変化</p>
+              <div className="flex flex-wrap gap-3">
+                {AXES.map(({ key, label, color }) => {
+                  const diff = latestItem.scores[key] - prevItem.scores[key];
+                  const sign = diff > 0 ? "+" : "";
+                  const diffClass = diff > 0 ? "text-green-600" : diff < 0 ? "text-red-500" : "text-gray-400";
+                  return (
+                    <span key={key} className={`text-xs font-medium ${diffClass}`}>
+                      {label.slice(0, 2)} {sign}{diff.toFixed(1)}
+                    </span>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {trendItems.length >= 2 && (
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
+            <p className="text-xs font-medium text-gray-500 mb-4">スコア推移（直近{trendItems.length}回）</p>
+            <div className="grid grid-cols-2 gap-4">
+              {AXES.map(({ key, label, color }) => {
+                const values = trendItems.map((h) => h.scores[key]);
+                const c = COLOR[color];
+                return (
+                  <div key={key} className={`${c.bg} rounded-xl p-3`}>
+                    <p className={`text-xs font-medium ${c.text} mb-2`}>{label}</p>
+                    <Sparkline values={values} color={c.stroke} />
+                    <div className="flex justify-between mt-1">
+                      <span className="text-xs text-gray-400">初回 {values[0]}</span>
+                      <span className={`text-xs font-bold ${c.text}`}>最新 {values[values.length - 1]}</span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // デフォルト：全体の統計表示
   const trendItems = [...scored].reverse().slice(-TREND_COUNT);
 
   return (
