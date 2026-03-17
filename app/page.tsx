@@ -469,8 +469,8 @@ export default function Home() {
       <header className="bg-white border-b border-gray-200 shadow-sm sticky top-0 z-10">
         <div className="max-w-3xl mx-auto px-4 py-4 flex items-center justify-between">
           <div>
-            <h1 className="text-xl font-bold text-gray-900">就活対策アプリ</h1>
-            <p className="text-xs text-gray-500 mt-0.5">AIが面接・ESの回答にフィードバックします</p>
+            <h1 className="text-xl font-bold text-gray-900">就跡</h1>
+            <p className="text-xs text-gray-500 mt-0.5">就活の軌跡を積み上げよう</p>
           </div>
           <div className="flex items-center gap-2">
             <button
@@ -930,7 +930,7 @@ export default function Home() {
               <div className="flex items-start justify-between mb-5">
                 <div>
                   <p className="text-xs font-semibold text-blue-500 uppercase tracking-wide mb-1">はじめての方へ</p>
-                  <h2 className="text-lg font-bold text-gray-900">就活対策アプリの使い方</h2>
+                  <h2 className="text-lg font-bold text-gray-900">就跡の使い方</h2>
                 </div>
                 <button
                   onClick={handleCloseTutorial}

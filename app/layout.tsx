@@ -13,8 +13,12 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "就活対策アプリ",
-  description: "AIが面接・ESの回答にフィードバックします",
+  title: "就跡",
+  description: "面接・ESの練習記録が残る就活アプリ",
+  openGraph: {
+    title: "就跡",
+    description: "面接・ESの練習記録が残る就活アプリ",
+  },
 };
 
 export default function RootLayout({
@@ -29,7 +33,7 @@ export default function RootLayout({
         <meta name="theme-color" content="#2563eb" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="default" />
-        <meta name="apple-mobile-web-app-title" content="就活対策" />
+        <meta name="apple-mobile-web-app-title" content="就跡" />
         <link rel="apple-touch-icon" href="/icon-192.png" />
       </head>
       <body
