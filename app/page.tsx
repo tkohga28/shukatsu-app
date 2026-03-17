@@ -502,7 +502,7 @@ export default function Home() {
         </div>
       </header>
 
-      <main className="max-w-3xl mx-auto px-4 py-8 space-y-6">
+      <main className="max-w-3xl mx-auto px-4 py-8 pb-20 space-y-6">
 
         {/* ═══ 履歴詳細 ═══ */}
         {view === "history-detail" && selectedItem && (
@@ -916,6 +916,21 @@ export default function Home() {
       <footer className="text-center text-xs text-gray-400 py-8">
         Powered by Claude Opus 4.6
       </footer>
+
+      {/* フィードバックボタン（固定フッター） */}
+      <div className="fixed bottom-0 left-0 right-0 z-20 flex justify-center pb-4 pointer-events-none">
+        <a
+          href="https://forms.gle/JYDwF4HfikXi8VN96"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="pointer-events-auto flex items-center gap-1.5 px-4 py-2 rounded-full bg-white border border-gray-200 shadow-sm text-xs text-gray-500 hover:text-gray-700 hover:border-gray-300 hover:shadow-md transition-all"
+        >
+          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" />
+          </svg>
+          フィードバックを送る
+        </a>
+      </div>
 
       {/* ═══ チュートリアルモーダル ═══ */}
       {showTutorial && (
